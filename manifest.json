@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Next & Tua Video",
+  "version": "1.0",
+  "description": "Tự động tua video và bấm Next",
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "action": {
+    "default_title": "Bấm để chạy Script"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "contextMenus"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

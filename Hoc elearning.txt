@@ -1,0 +1,69 @@
+Bước 1: F12 -> console -> allow pasting
+Bước 2: copy and pasting
+setInterval(() => {
+
+    // 1. Tự động tua video đến cuối
+
+    document.querySelectorAll('video').forEach(v => {
+
+        try {
+
+            v.onseeking = null;
+
+            v.onseeked = null;
+
+            if (!isNaN(v.duration) && v.duration !== Infinity) {
+
+                if (Math.abs(v.currentTime - v.duration) > 2) {
+
+                    v.currentTime = v.duration;
+
+                    console.log("⏩ Đã tua đến cuối video:", v.currentTime, "/", v.duration);
+
+                }
+
+            }
+
+        } catch (e) {
+
+            console.error("Lỗi khi xử lý video:", e);
+
+        }
+
+    });
+ 
+    // 2. Tự động mở khóa và bấm Next nếu nút này xuất hiện
+
+    const btn = document.getElementById('next');
+
+    if (btn && btn.dataset.clicked !== "true") {
+
+        // Mở khóa các thuộc tính chặn click của web
+
+        btn.removeAttribute("disabled");
+
+        btn.setAttribute("aria-disabled", "false");
+
+        btn.style.pointerEvents = "auto";
+
+        btn.style.opacity = 1;
+
+        btn.style.display = "inline-block";
+
+        // Bấm Next
+
+        btn.click();
+
+        // Đánh dấu đã bấm để tránh spam click gây đơ trang
+
+        btn.dataset.clicked = "true";
+
+        console.log("🖱️ Đã tự động click Next");
+
+    }
+ 
+    // 3. Xóa thuộc tính chỉ đọc (nếu có bài tập/form trên trang)
+
+    document.querySelectorAll('.read-only').forEach(e => e.classList.remove('read-only'));
+ 
+}, 1000);
