@@ -38,19 +38,9 @@ if (!window.hasRunAutoScript) {
         <!-- Option 1: Auto Learning -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <button id="toggle-learning-btn" style="background:#2196F3; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:bold; flex: 1; margin-right: 10px; transition: 0.2s;">Bật Auto Learning</button>
-            <span id="status-learning" style="color: #9e9e9e; font-size: 13px; min-width: 80px; text-align: right;">⚫ Đã dừng</span>
+            <span id="status-learning" aria-live="polite" style="color: #9e9e9e; font-size: 13px; min-width: 80px; text-align: right;">⚫ Đã dừng</span>
         </div>
 
-        <!-- Option 2: Auto Answer -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <button id="toggle-quiz-btn" style="background:#FF9800; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:bold; flex: 1; margin-right: 10px; transition: 0.2s;">Bật Auto Answer</button>
-            <span id="status-quiz" style="color: #9e9e9e; font-size: 13px; min-width: 80px; text-align: right;">⚫ Đã dừng</span>
-        </div>
-
-        <!-- Trạng thái chi tiết của Gemini -->
-        <div id="gemini-status" style="line-height: 1.5; font-size: 13px; border-top: 1px dashed #555; padding-top: 8px; display: none; margin-top: 10px; word-wrap: break-word; user-select: text; cursor: text;">
-            🤖 Gemini: <i>Đang chờ kích hoạt...</i>
-        </div>
     `;
     document.body.appendChild(statusBox);
 
@@ -84,72 +74,162 @@ if (!window.hasRunAutoScript) {
     // LOGIC BẬT/TẮT TỪNG TÍNH NĂNG
     // ==========================================
     let isLearningRunning = false;
-    let isQuizRunning = false;
     let learningIntervalId = null;
-    let quizIntervalId = null;
+    let highlightIntervalId = null;
+    let pausedSlideLabel = null;
+
+    const highlightLayer = document.createElement('div');
+    highlightLayer.id = 'auto-script-highlight-layer';
+    highlightLayer.style.cssText = 'position: fixed; inset: 0; pointer-events: none; z-index: 999998;';
+    document.body.appendChild(highlightLayer);
+
+    const highlightStyle = document.createElement('style');
+    highlightStyle.textContent = `
+        @keyframes autoScriptPulse {
+            0%, 100% { box-shadow: 0 0 0 3px rgba(255,152,0,0.9), 0 0 12px 4px rgba(255,152,0,0.6); }
+            50% { box-shadow: 0 0 0 5px rgba(255,235,59,0.95), 0 0 22px 8px rgba(255,152,0,0.8); }
+        }
+    `;
+    document.head.appendChild(highlightStyle);
 
     const btnLearning = document.getElementById('toggle-learning-btn');
     const statusLearning = document.getElementById('status-learning');
-    const btnQuiz = document.getElementById('toggle-quiz-btn');
-    const statusQuiz = document.getElementById('status-quiz');
-    const geminiStatusBox = document.getElementById('gemini-status');
-
-    function updateGeminiStatus(message, color = "#FFEB3B") {
-		const statusBox = document.getElementById('gemini-status');
-		if (statusBox) {
-			statusBox.style.display = "block";
-			statusBox.innerHTML = `🤖 Gemini: <span style="color: ${color}">${message}</span>`;
-		}
-	}
 
     btnLearning.addEventListener('click', () => {
-        isLearningRunning = !isLearningRunning;
         if (isLearningRunning) {
-            btnLearning.innerText = "Tắt Auto Learning";
-            btnLearning.style.background = "#f44336"; 
-            statusLearning.innerHTML = "🟢 Đang chạy";
-            statusLearning.style.color = "#4CAF50";
-            learningIntervalId = setInterval(runAutoLearningTask, 500);
+            stopLearning("⚫ Đã dừng", "#9e9e9e");
+            stopHighlighting();
         } else {
-            btnLearning.innerText = "Bật Auto Learning";
-            btnLearning.style.background = "#2196F3"; 
-            statusLearning.innerHTML = "⚫ Đã dừng";
-            statusLearning.style.color = "#9e9e9e";
-            clearInterval(learningIntervalId);
+            startLearning();
         }
     });
 
-    btnQuiz.addEventListener('click', () => {
-        isQuizRunning = !isQuizRunning;
-        if (isQuizRunning) {
-            btnQuiz.innerText = "Tắt Auto Answer";
-            btnQuiz.style.background = "#f44336"; 
-            statusQuiz.innerHTML = "🟢 Đang chạy";
-            statusQuiz.style.color = "#4CAF50";
-            
-            window.lastAskedQuestion = "";
-            window.currentUIState = "";
-            updateGeminiStatus("<i>Đang quét và tìm khung bài thi xuyên Iframe...</i>", "#9e9e9e");
+    function startLearning() {
+        isLearningRunning = true;
+        btnLearning.innerText = "Tắt Auto Learning";
+        btnLearning.style.background = "#f44336"; 
+        statusLearning.innerHTML = "🟢 Đang chạy";
+        statusLearning.style.color = "#4CAF50";
+        statusLearning.title = "";
+        stopHighlighting();
+        clearInterval(learningIntervalId);
+        learningIntervalId = setInterval(runAutoLearningTask, 500);
+    }
 
-            quizIntervalId = setInterval(runAutoQuizTask, 1000); 
-        } else {
-            btnQuiz.innerText = "Bật Auto Answer";
-            btnQuiz.style.background = "#FF9800"; 
-            statusQuiz.innerHTML = "⚫ Đã dừng";
-            statusQuiz.style.color = "#9e9e9e";
-            geminiStatusBox.style.display = "none"; 
-            clearInterval(quizIntervalId);
-        }
-    });
+    function stopLearning(statusText, statusColor) {
+        isLearningRunning = false;
+        clearInterval(learningIntervalId);
+        learningIntervalId = null;
+        btnLearning.innerText = "Bật Auto Learning";
+        btnLearning.style.background = "#2196F3"; 
+        statusLearning.innerHTML = statusText;
+        statusLearning.style.color = statusColor;
+        statusLearning.title = "";
+    }
+
+    function getSlideLabel() {
+        const label = document.getElementById('slide-label');
+        return label ? label.textContent.trim() : '';
+    }
+
+    function isNextAvailable() {
+        const btnNext = document.getElementById('next');
+        if (!btnNext || btnNext.getAttribute('aria-disabled') === 'true') return false;
+        const style = window.getComputedStyle(btnNext);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+    }
+
+    function isSlideTimelineDone() {
+        const progressBar = document.querySelector('input[data-ref="progressBar"]');
+        if (!progressBar || !progressBar.max) return true;
+        return parseInt(progressBar.value || 0) >= parseInt(progressBar.max) - 500;
+    }
 
     document.getElementById('close-panel-btn').addEventListener('click', () => {
         clearInterval(learningIntervalId);
-        clearInterval(quizIntervalId);
+        stopHighlighting();
+        highlightLayer.remove();
+        highlightStyle.remove();
         window.hasRunAutoScript = false;          
         statusBox.remove();                        
     });
 
+    function getInteractionLabel(button) {
+        const modelId = (button.dataset.represents || '').split('.').pop();
+        const slideObject = modelId && document.querySelector(`.slide-object[data-model-id="${CSS.escape(modelId)}"]`);
+        return (slideObject && slideObject.getAttribute('data-acc-text')) ||
+            button.getAttribute('aria-label') ||
+            button.innerText.trim();
+    }
+
+    function renderHighlights(buttons) {
+        highlightLayer.replaceChildren(...buttons.map(button => {
+            const rect = button.getBoundingClientRect();
+            const box = document.createElement('div');
+            box.style.cssText = `
+                position: fixed;
+                left: ${rect.left - 4}px;
+                top: ${rect.top - 4}px;
+                width: ${rect.width + 8}px;
+                height: ${rect.height + 8}px;
+                border-radius: 6px;
+                animation: autoScriptPulse 1.2s ease-in-out infinite;
+            `;
+            const tag = document.createElement('span');
+            tag.textContent = '👆 Bấm vào đây';
+            tag.style.cssText = 'position: absolute; left: 0; top: -24px; background: #FF9800; color: #fff; font: bold 12px Arial, sans-serif; padding: 2px 6px; border-radius: 4px; white-space: nowrap;';
+            box.appendChild(tag);
+            return box;
+        }));
+    }
+
+    function refreshHighlights() {
+        const buttons = findVisibleStorylineInteractions();
+        // Auto-resume once the user's own click moved the course on or cleared the interaction.
+        if (buttons.length === 0 || getSlideLabel() !== pausedSlideLabel) {
+            startLearning();
+            return;
+        }
+        renderHighlights(buttons);
+        statusLearning.title = buttons.map(getInteractionLabel).join('\n');
+    }
+
+    function startHighlighting() {
+        stopHighlighting();
+        refreshHighlights();
+        highlightIntervalId = setInterval(refreshHighlights, 500);
+    }
+
+    function stopHighlighting() {
+        clearInterval(highlightIntervalId);
+        highlightIntervalId = null;
+        highlightLayer.replaceChildren();
+    }
+
+    function findVisibleStorylineInteractions() {
+        return Array.from(document.querySelectorAll('.acc-shadow-dom button.acc-button')).filter(button => {
+            const label = button.getAttribute('aria-label') || button.innerText || '';
+            const style = window.getComputedStyle(button);
+            const isMediaControl = /\.(mp4|webm|mov|mp3|wav)(?:\s|$)/i.test(label);
+
+            return !isMediaControl &&
+                !button.closest('[aria-hidden="true"]') &&
+                !button.disabled &&
+                style.display !== 'none' &&
+                style.visibility === 'visible' &&
+                Number(style.opacity) > 0 &&
+                button.getClientRects().length > 0;
+        });
+    }
+
     function runAutoLearningTask() {
+        if (!isNextAvailable() && isSlideTimelineDone() && findVisibleStorylineInteractions().length > 0) {
+            stopLearning("🟠 Cần thao tác", "#FF9800");
+            pausedSlideLabel = getSlideLabel();
+            startHighlighting();
+            return;
+        }
+
         document.querySelectorAll('video, audio').forEach(media => { 
             try { 
                 if (!media.src || media.src.startsWith('data:')) return; 
@@ -198,151 +278,6 @@ if (!window.hasRunAutoScript) {
             }
         } 
         document.querySelectorAll('.read-only').forEach(e => e.classList.remove('read-only')); 
-    }
-
-    // ==========================================
-    // LOGIC AUTO ANSWER ĐỤC THỦNG IFRAME
-    // ==========================================
-
-    // Hàm đệ quy quét xuyên màng iframe để tìm câu hỏi
-    function getQuizDocument(currentDoc) {
-        try {
-            if (currentDoc.querySelector('span[id*="questionText"]')) {
-                return currentDoc;
-            }
-            const frames = currentDoc.querySelectorAll('iframe, frame');
-            for (let i = 0; i < frames.length; i++) {
-                try {
-                    const childDoc = frames[i].contentDocument || frames[i].contentWindow.document;
-                    if (childDoc) {
-                        const foundDoc = getQuizDocument(childDoc);
-                        if (foundDoc) return foundDoc;
-                    }
-                } catch(e) { } // Bỏ qua lỗi chặn chéo Domain
-            }
-        } catch(e) {}
-        return null;
-    }
-
-    function runAutoQuizTask() {
-        if (!isQuizRunning) return;
-
-        // 1. TÌM TÀI LIỆU CHỨA BÀI THI (Trong iframe hoặc thẻ gốc)
-        const quizDoc = getQuizDocument(document);
-
-        if (!quizDoc) {
-            if (window.currentUIState !== "waiting_area") {
-                updateGeminiStatus("<i>Đang chờ giao diện bài thi...</i>", "#9e9e9e");
-                window.currentUIState = "waiting_area";
-            }
-            return;
-        }
-
-        // 2. LẤY TIÊU ĐỀ VÀ NỘI DUNG CÂU HỎI
-        const titleEl = quizDoc.querySelector('.quizUiQuestionTitle');
-        const questionTitle = titleEl ? (titleEl.innerText || titleEl.textContent).trim() : "Câu hỏi";
-
-        const questionTextEl = quizDoc.querySelector('span[id*="questionText"] .sfUserAssessment');
-        const questionText = questionTextEl ? (questionTextEl.innerText || questionTextEl.textContent).trim() : "";
-
-        if (!questionText) {
-            if (window.currentUIState !== "waiting_text") {
-                updateGeminiStatus("<i>Đang đọc dữ liệu câu hỏi...</i>", "#9e9e9e");
-                window.currentUIState = "waiting_text";
-            }
-            return;
-        }
-
-        // Bỏ qua nếu nội dung giống y chang câu trước đó (chưa kịp tải câu mới)
-        if (questionText === window.lastAskedQuestion) {
-            return;
-        }
-
-        // Đã qua câu mới -> Lưu lại
-        window.lastAskedQuestion = questionText;
-        window.currentUIState = "processing";
-        updateGeminiStatus(`Đang phân tích <b>[${questionTitle}]</b>...`, "#2196F3");
-
-        // 3. TÌM VÙNG ĐÁP ÁN
-        const radioBtns = quizDoc.querySelectorAll('.sapMRb');
-        const optionEls = quizDoc.querySelectorAll('span[id*="idSAOption"] .sfUserAssessment');
-
-        if (optionEls.length === 0 || radioBtns.length === 0) {
-            updateGeminiStatus(`❌ <b>Lỗi:</b> Không đọc được các lựa chọn A B C D!`, "#f44336");
-            return;
-        }
-
-        let optionsText = "";
-        let optionsArray = [];
-        optionEls.forEach((el, index) => {
-            let text = (el.innerText || el.textContent).trim();
-            if(text) {
-                optionsText += `${index + 1}. ${text}\n`;
-                optionsArray.push({ text: text, index: index, radio: radioBtns[index] });
-            }
-        });
-
-        // 4. TẠO PROMPT
-        const prompt = `Câu hỏi: ${questionText}\nCác đáp án:\n${optionsText}\nHãy trả lời bằng cách chỉ in ra nội dung CHÍNH XÁC của đáp án đúng nhất (chỉ trả về nội dung, không thêm số thứ tự, không thêm lời giải thích).`;
-
-        updateGeminiStatus(`Đang gửi <b>[${questionTitle}]</b> cho Gemini API... ⏳`, "#00bcd4");
-
-        // 5. GỌI BACKGROUND.JS ĐỂ NHỜ GEMINI
-        try {
-            chrome.runtime.sendMessage({ action: "askGemini", prompt: prompt }, (response) => {
-                if (response && response.success) {
-                    let answer = response.answer.trim();
-                    let selectedIndex = -1;
-                    
-                    optionsArray.forEach((opt) => {
-                        const cleanOpt = opt.text.toLowerCase().replace(/\s+/g, '');
-                        const cleanAns = answer.toLowerCase().replace(/\s+/g, '');
-                        // Kiểm tra chuỗi con qua lại
-                        if (cleanAns.includes(cleanOpt) || cleanOpt.includes(cleanAns)) {
-                            selectedIndex = opt.index;
-                        }
-                    });
-
-                    if (selectedIndex !== -1 && optionsArray[selectedIndex].radio) {
-                        const selectedText = optionsArray[selectedIndex].text;
-                        const radioToClick = optionsArray[selectedIndex].radio;
-                        
-                        updateGeminiStatus(`✅ Đáp án: <b>${selectedText}</b>. Đang click...`, "#4CAF50");
-                        
-                        // Click vào Radio trong đúng Iframe chứa nó
-                        const docView = quizDoc.defaultView || window;
-                        const eventsToSimulate = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
-                        eventsToSimulate.forEach(evName => {
-                            radioToClick.dispatchEvent(new MouseEvent(evName, { bubbles: true, cancelable: true, view: docView, buttons: 1 }));
-                        });
-
-                        updateGeminiStatus(`✅ <b>${questionTitle}:</b> Đã chọn xong<br>👉 Tự động Next sau 2s...`, "#4CAF50");
-                        
-                        // Tự động bấm NEXT sau 2 giây
-                        setTimeout(() => {
-                            const nextBtnBdi = Array.from(quizDoc.querySelectorAll('bdi')).find(el => {
-                                const t = (el.innerText || el.textContent).trim();
-                                return t === 'Next' || t === 'Tiếp theo';
-                            });
-                            
-                            if (nextBtnBdi) {
-                                const nextBtn = nextBtnBdi.closest('button');
-                                if (nextBtn) nextBtn.click();
-                            } else {
-                                updateGeminiStatus(`⚠️ <b>${questionTitle}:</b> Không tìm thấy nút NEXT. Vui lòng bấm tay!`, "#FF9800");
-                            }
-                        }, 2000);
-
-                    } else {
-                        updateGeminiStatus(`⚠️ Gemini chọn: <b>${answer}</b><br>❌ <i>Không khớp đáp án hiển thị. Vui lòng tự chọn!</i>`, "#FF9800");
-                    }
-                } else {
-                    updateGeminiStatus(`❌ <b>Lỗi API:</b> ${response ? response.error : 'Mất kết nối'}`, "#f44336");
-                }
-            });
-        } catch (error) {
-            updateGeminiStatus(`❌ <b>Lỗi hệ thống:</b> Không kết nối được extension.`, "#f44336");
-        }
     }
 
 } else {
